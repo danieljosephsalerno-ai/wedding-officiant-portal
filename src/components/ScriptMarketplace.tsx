@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Filter, Star, Heart, User, Globe, ShoppingCart } from 'lucide-react'
+import { Search, Filter, Star, Heart, User, Globe, ShoppingCart, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -635,6 +635,17 @@ function ScriptMarketplaceContent() {
               <p className="text-gray-600 mt-1">{t.subtitle}</p>
             </div>
             <div className="flex items-center gap-4">
+              {/* Back to Portal */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open('https://portal.ordainedpro.com', '_blank')}
+                className="flex items-center gap-2 border-primary text-primary hover:bg-primary hover:text-white"
+              >
+                <ExternalLink className="h-4 w-4" />
+                <span className="hidden sm:inline">Officiant Portal</span>
+              </Button>
+
               {/* User Profile */}
               <UserProfile language={language} />
 
