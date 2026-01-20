@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createClient } from '@supabase/supabase-js'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 interface CartItem {
   id: string
@@ -22,7 +14,21 @@ interface CartItem {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Stripe secret key is configured
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error('STRIPE_SECRET_KEY is not configured')
+      return NextResponse.json(
+        { error: 'Payment system not configured. Please contact support.' },
+        { status: 500 }
+      )
+    }
+
+    // Initialize Stripe with the secret key
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+
     const { items, userId } = await request.json() as { items: CartItem[], userId: string }
+
+    console.log('Checkout request received:', { itemCount: items?.length, userId })
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: 'No items in cart' }, { status: 400 })
@@ -48,7 +54,8 @@ export async function POST(request: NextRequest) {
     }))
 
     // Get the origin from the request
-    const origin = request.headers.get('origin') || 'http://localhost:3000'
+    const origin = request.headers.get('origin') || 'https://scripts.ordainedpro.com'
+    console.log('Using origin for redirect:', origin)
 
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
@@ -63,11 +70,29 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    console.log('Stripe session created:', { sessionId: session.id, url: session.url })
+
+    if (!session.url) {
+      return NextResponse.json(
+        { error: 'Failed to generate checkout URL' },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json({ sessionId: session.id, url: session.url })
   } catch (error) {
     console.error('Checkout error:', error)
+
+    // Provide more detailed error message
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+    const isStripeError = error instanceof Stripe.errors.StripeError
+
     return NextResponse.json(
-      { error: 'Failed to create checkout session' },
+      {
+        error: isStripeError
+          ? `Payment error: ${errorMessage}`
+          : `Checkout failed: ${errorMessage}`
+      },
       { status: 500 }
     )
   }
