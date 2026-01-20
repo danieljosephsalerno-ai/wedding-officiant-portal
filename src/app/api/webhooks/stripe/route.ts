@@ -2,13 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+// Lazy initialize Stripe to avoid build-time errors when API key is not available
+let stripe: Stripe | null = null
+function getStripe() {
+  if (!stripe) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not configured')
+    }
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+  }
+  return stripe
+}
 
 // Use service role key for webhook operations (server-side only)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+function getSupabase() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured')
+  }
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.text()
@@ -17,7 +32,7 @@ export async function POST(request: NextRequest) {
   // If webhook secret is configured, verify signature
   if (process.env.STRIPE_WEBHOOK_SECRET && signature) {
     try {
-      const event = stripe.webhooks.constructEvent(
+      const event = getStripe().webhooks.constructEvent(
         body,
         signature,
         process.env.STRIPE_WEBHOOK_SECRET
@@ -46,10 +61,12 @@ async function handleStripeEvent(event: Stripe.Event) {
       await handleSuccessfulPayment(session)
       break
     }
+
     case 'payment_intent.succeeded': {
       console.log('Payment intent succeeded:', event.data.object)
       break
     }
+
     default:
       console.log(`Unhandled event type: ${event.type}`)
   }
@@ -67,6 +84,7 @@ async function handleSuccessfulPayment(session: Stripe.Checkout.Session) {
   }
 
   try {
+    const supabase = getSupabase()
     const scriptIds = JSON.parse(scriptIdsJson) as string[]
     const amountTotal = session.amount_total ? session.amount_total / 100 : 0
 
