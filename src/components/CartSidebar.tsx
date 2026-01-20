@@ -116,16 +116,22 @@ export function CartSidebar({ language }: CartSidebarProps) {
       const data = await response.json()
 
       if (!response.ok) {
+        console.error('Checkout API error:', data)
         throw new Error(data.error || 'Checkout failed')
       }
 
       // Redirect to Stripe checkout
       if (data.url) {
         window.location.href = data.url
+      } else {
+        throw new Error('No checkout URL received')
       }
     } catch (error) {
       console.error('Checkout error:', error)
-      alert(language === 'en' ? 'Checkout failed. Please try again.' : 'Error en el pago. Por favor, inténtalo de nuevo.')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      alert(language === 'en'
+        ? `Checkout failed: ${errorMessage}. Please try again.`
+        : `Error en el pago: ${errorMessage}. Por favor, inténtalo de nuevo.`)
     } finally {
       setIsCheckingOut(false)
     }
