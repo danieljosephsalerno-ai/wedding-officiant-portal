@@ -107,15 +107,15 @@ export function AuthDialog({ open, onOpenChange, language }: AuthDialogProps) {
     e.preventDefault()
     setError('')
     setIsLoading(true)
-
     try {
-      const success = await login(loginEmail, loginPassword)
-      if (success) {
+      const result = await login(loginEmail, loginPassword)
+      if (result === true) {
         onOpenChange(false)
         setLoginEmail('')
         setLoginPassword('')
       } else {
-        setError(t.loginError)
+        // Show actual error message
+        setError(typeof result === 'string' ? result : t.loginError)
       }
     } catch (err) {
       setError(t.loginError)

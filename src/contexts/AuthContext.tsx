@@ -23,7 +23,7 @@ export interface User {
 interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<boolean>
+  login: (email: string, password: string) => Promise<boolean | string>
   logout: () => void
   signup: (userData: Partial<User> & { email: string; password: string; name: string; userType: UserType }) => Promise<boolean>
   updateUser: (userData: Partial<User>) => void
@@ -126,27 +126,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<boolean | string> => {
     try {
+      console.log('Attempting login for:', email)
+      console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
-        console.error('Login error:', error)
-        return false
+        console.error('Login error:', error.message, error)
+        // Return the actual error message for debugging
+        return error.message || 'Login failed'
       }
 
       if (data.user) {
+        console.log('Login successful for user:', data.user.id)
         await loadUserData(data.user)
         return true
       }
 
-      return false
+      return 'No user data returned'
     } catch (error) {
-      console.error('Login error:', error)
-      return false
+      console.error('Login exception:', error)
+      return error instanceof Error ? error.message : 'Login failed'
     }
   }
 
