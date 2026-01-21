@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
@@ -23,7 +23,7 @@ export interface User {
 interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<boolean | string>
+  login: (email: string, password: string) => Promise<boolean>
   logout: () => void
   signup: (userData: Partial<User> & { email: string; password: string; name: string; userType: UserType }) => Promise<boolean>
   updateUser: (userData: Partial<User>) => void
@@ -52,6 +52,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+  const isLoadingUserRef = useRef(false)
+  const loadedUserIdRef = useRef<string | null>(null)
 
   // Load user data from Supabase
   useEffect(() => {
@@ -74,10 +76,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event)
+
+      if (event === 'SIGNED_OUT') {
+        setUser(null)
+        loadedUserIdRef.current = null
+        return
+      }
+
       if (session?.user) {
+        // Prevent duplicate loads for the same user
+        if (loadedUserIdRef.current === session.user.id) {
+          return
+        }
         await loadUserData(session.user)
       } else {
         setUser(null)
+        loadedUserIdRef.current = null
       }
     })
 
@@ -88,31 +103,65 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   const loadUserData = async (supabaseUser: SupabaseUser) => {
+    // Prevent concurrent loads
+    if (isLoadingUserRef.current) {
+      console.log('Already loading user data, skipping...')
+      return
+    }
+
+    // Prevent reloading same user
+    if (loadedUserIdRef.current === supabaseUser.id) {
+      console.log('User already loaded, skipping...')
+      return
+    }
+
+    isLoadingUserRef.current = true
+
     try {
-      // Get user profile
-      const { data: profile } = await supabase
+      console.log('Loading user data for:', supabaseUser.email)
+
+      // Get user profile - handle case where profile doesn't exist
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .single()
 
-      // Get user's favorites
+      // If profile doesn't exist, create a basic one
+      if (profileError) {
+        console.log('Profile not found or error:', profileError.message)
+
+        // Check if it's a "not found" error - create a profile
+        if (profileError.code === 'PGRST116' || profileError.message.includes('not found')) {
+          console.log('Creating new profile for user')
+          const newProfile = {
+            id: supabaseUser.id,
+            name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
+            user_type: supabaseUser.user_metadata?.user_type || 'guest',
+            email: supabaseUser.email,
+          }
+
+          await supabase.from('profiles').upsert(newProfile)
+        }
+      }
+
+      // Get user's favorites (may not exist yet)
       const { data: favorites } = await supabase
         .from('favorites')
         .select('script_id')
         .eq('user_id', supabaseUser.id)
 
-      // Get user's purchases
+      // Get user's purchases (may not exist yet)
       const { data: purchases } = await supabase
         .from('purchases')
         .select('script_id')
         .eq('user_id', supabaseUser.id)
 
-      setUser({
+      const userData: User = {
         id: supabaseUser.id,
-        name: profile?.name || supabaseUser.email?.split('@')[0] || 'User',
+        name: profile?.name || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
         email: supabaseUser.email!,
-        userType: profile?.user_type || 'guest',
+        userType: profile?.user_type || supabaseUser.user_metadata?.user_type || 'guest',
         location: profile?.location,
         bio: profile?.bio,
         weddingDate: profile?.wedding_date,
@@ -120,38 +169,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
         avatar: profile?.avatar_url,
         favoriteScripts: favorites?.map(f => f.script_id) || [],
         purchasedScripts: purchases?.map(p => p.script_id) || [],
-      })
+      }
+
+      loadedUserIdRef.current = supabaseUser.id
+      setUser(userData)
+      console.log('User data loaded successfully')
     } catch (error) {
       console.error('Error loading user data:', error)
+      // Still set a basic user object so the app works
+      setUser({
+        id: supabaseUser.id,
+        name: supabaseUser.email?.split('@')[0] || 'User',
+        email: supabaseUser.email!,
+        userType: 'guest',
+        favoriteScripts: [],
+        purchasedScripts: [],
+      })
+      loadedUserIdRef.current = supabaseUser.id
+    } finally {
+      isLoadingUserRef.current = false
     }
   }
 
-  const login = async (email: string, password: string): Promise<boolean | string> => {
+  const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      console.log('Attempting login for:', email)
-      console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
-
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
-        console.error('Login error:', error.message, error)
-        // Return the actual error message for debugging
-        return error.message || 'Login failed'
+        console.error('Login error:', error)
+        return false
       }
 
       if (data.user) {
-        console.log('Login successful for user:', data.user.id)
         await loadUserData(data.user)
         return true
       }
 
-      return 'No user data returned'
+      return false
     } catch (error) {
-      console.error('Login exception:', error)
-      return error instanceof Error ? error.message : 'Login failed'
+      console.error('Login error:', error)
+      return false
     }
   }
 

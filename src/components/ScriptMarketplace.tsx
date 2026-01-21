@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Search, Filter, Star, Heart, User, Globe, ShoppingCart, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -510,9 +510,51 @@ function ScriptMarketplaceContent() {
   const [minRating, setMinRating] = useState(0)
   const [currentTab, setCurrentTab] = useState('all')
   const [previewScript, setPreviewScript] = useState<Script | null>(null)
+  const [purchaseStatus, setPurchaseStatus] = useState<'success' | 'cancelled' | null>(null)
 
-  const { getCartCount, setIsOpen, addToCart } = useCart()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const { getCartCount, setIsOpen, addToCart, clearCart } = useCart()
   const { toggleFavorite, isFavorited, user } = useAuth()
+
+  // Handle checkout redirect
+  useEffect(() => {
+    const purchase = searchParams.get('purchase')
+    const sessionId = searchParams.get('session_id')
+
+    if (purchase === 'success' && sessionId) {
+      console.log('Purchase successful! Session:', sessionId)
+      setPurchaseStatus('success')
+      clearCart() // Clear the cart after successful purchase
+
+      // Clear URL params after a short delay
+      const timer = setTimeout(() => {
+        router.replace('/', { scroll: false })
+      }, 100)
+
+      return () => clearTimeout(timer)
+    } else if (purchase === 'cancelled') {
+      setPurchaseStatus('cancelled')
+
+      // Clear URL params
+      const timer = setTimeout(() => {
+        router.replace('/', { scroll: false })
+      }, 100)
+
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, router, clearCart])
+
+  // Auto-dismiss success/cancelled message
+  useEffect(() => {
+    if (purchaseStatus) {
+      const timer = setTimeout(() => {
+        setPurchaseStatus(null)
+      }, 8000)
+      return () => clearTimeout(timer)
+    }
+  }, [purchaseStatus])
 
   useEffect(() => {
     setMounted(true)
@@ -626,6 +668,57 @@ function ScriptMarketplaceContent() {
 
   return (
     <div className="min-h-screen background-gradient">
+      {/* Purchase Status Banner */}
+      {purchaseStatus === 'success' && (
+        <div className="bg-green-500 text-white px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="font-medium">
+                {language === 'en'
+                  ? 'Purchase successful! Your scripts are now available in your library.'
+                  : '¡Compra exitosa! Tus guiones están ahora disponibles en tu biblioteca.'}
+              </span>
+            </div>
+            <button
+              onClick={() => setPurchaseStatus(null)}
+              className="text-white hover:text-green-200 transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {purchaseStatus === 'cancelled' && (
+        <div className="bg-amber-500 text-white px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span className="font-medium">
+                {language === 'en'
+                  ? 'Checkout was cancelled. Your items are still in your cart.'
+                  : 'El pago fue cancelado. Tus artículos aún están en tu carrito.'}
+              </span>
+            </div>
+            <button
+              onClick={() => setPurchaseStatus(null)}
+              className="text-white hover:text-amber-200 transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-light shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-6">
