@@ -54,21 +54,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const supabase = createClient()
   const isLoadingUserRef = useRef(false)
   const loadedUserIdRef = useRef<string | null>(null)
+  const isMountedRef = useRef(true)
 
   // Load user data from Supabase
   useEffect(() => {
+    isMountedRef.current = true
+
     const initAuth = async () => {
       try {
         // Get current session
         const { data: { session } } = await supabase.auth.getSession()
 
-        if (session?.user) {
+        if (session?.user && isMountedRef.current) {
           await loadUserData(session.user)
         }
       } catch (error) {
+        // Ignore AbortErrors - they happen when component unmounts during async operations
+        if (error instanceof Error && error.name === 'AbortError') {
+          return
+        }
         console.error('Auth initialization error:', error)
       } finally {
-        setLoading(false)
+        if (isMountedRef.current) {
+          setLoading(false)
+        }
       }
     }
 
@@ -76,6 +85,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMountedRef.current) return
+      
       console.log('Auth state changed:', event)
 
       if (event === 'SIGNED_OUT') {
@@ -97,6 +108,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     })
 
     return () => {
+      isMountedRef.current = false
       subscription.unsubscribe()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
