@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Search, Filter, Star, Heart, User, Globe, ShoppingCart, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -546,39 +546,45 @@ function ScriptMarketplaceContent() {
   const [previewScript, setPreviewScript] = useState<Script | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<'success' | 'cancelled' | null>(null)
 
+  // Track processed session to prevent infinite loops
+  const processedSessionRef = useRef<string | null>(null)
+
   const router = useRouter()
   const searchParams = useSearchParams()
 
   const { getCartCount, setIsOpen, addToCart, clearCart } = useCart()
   const { toggleFavorite, isFavorited, user } = useAuth()
 
-  // Handle checkout redirect
+  // Store clearCart in a ref to avoid dependency issues
+  const clearCartRef = useRef(clearCart)
+  clearCartRef.current = clearCart
+
+  // Handle checkout redirect - runs once per session
   useEffect(() => {
     const purchase = searchParams.get('purchase')
     const sessionId = searchParams.get('session_id')
 
-    if (purchase === 'success' && sessionId) {
+    // Only process each session once
+    if (purchase === 'success' && sessionId && processedSessionRef.current !== sessionId) {
+      processedSessionRef.current = sessionId
       console.log('Purchase successful! Session:', sessionId)
       setPurchaseStatus('success')
-      clearCart() // Clear the cart after successful purchase
+      clearCartRef.current() // Clear the cart after successful purchase
 
       // Clear URL params after a short delay
-      const timer = setTimeout(() => {
-        router.replace('/', { scroll: false })
+      setTimeout(() => {
+        window.history.replaceState({}, '', '/')
       }, 100)
-
-      return () => clearTimeout(timer)
-    } else if (purchase === 'cancelled') {
+    } else if (purchase === 'cancelled' && processedSessionRef.current !== 'cancelled') {
+      processedSessionRef.current = 'cancelled'
       setPurchaseStatus('cancelled')
 
       // Clear URL params
-      const timer = setTimeout(() => {
-        router.replace('/', { scroll: false })
+      setTimeout(() => {
+        window.history.replaceState({}, '', '/')
       }, 100)
-
-      return () => clearTimeout(timer)
     }
-  }, [searchParams, router, clearCart])
+  }, [searchParams])
 
   // Auto-dismiss success/cancelled message
   useEffect(() => {
