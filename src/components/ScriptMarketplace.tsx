@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Search, Filter, Star, Heart, User, Globe, ShoppingCart, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -495,7 +495,41 @@ const ceremonyTypes = {
 const availableLanguages = ['English', 'Spanish', 'Punjabi', 'Hindi', 'French', 'Chinese']
 
 export function ScriptMarketplace() {
-  return <ScriptMarketplaceContent />
+  return (
+    <Suspense fallback={<ScriptMarketplaceLoading />}>
+      <ScriptMarketplaceContent />
+    </Suspense>
+  )
+}
+
+function ScriptMarketplaceLoading() {
+  return (
+    <div className="min-h-screen background-gradient">
+      <div className="bg-white border-b border-light shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-64 mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-96"></div>
+          </div>
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="flex gap-8">
+          <div className="w-80 space-y-6">
+            <div className="h-64 bg-gray-100 rounded-lg animate-pulse"></div>
+            <div className="h-48 bg-gray-100 rounded-lg animate-pulse"></div>
+          </div>
+          <div className="flex-1">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="h-80 bg-gray-100 rounded-lg animate-pulse"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function ScriptMarketplaceContent() {
