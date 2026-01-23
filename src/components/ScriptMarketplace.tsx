@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, Suspense, useRef, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, Suspense, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { CheckoutHandler } from '@/components/CheckoutHandler'
 import { Search, Filter, Star, Heart, User, Globe, ShoppingCart, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -495,10 +496,21 @@ const ceremonyTypes = {
 const availableLanguages = ['English', 'Spanish', 'Punjabi', 'Hindi', 'French', 'Chinese']
 
 export function ScriptMarketplace() {
+  const [purchaseStatus, setPurchaseStatus] = useState<'success' | 'cancelled' | null>(null)
+  
+  const handleStatusChange = useCallback((status: 'success' | 'cancelled' | null) => {
+    setPurchaseStatus(status)
+  }, [])
+  
   return (
-    <Suspense fallback={<ScriptMarketplaceLoading />}>
-      <ScriptMarketplaceContent />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <CheckoutHandler onStatusChange={handleStatusChange} />
+      </Suspense>
+      <Suspense fallback={<ScriptMarketplaceLoading />}>
+        <ScriptMarketplaceContent purchaseStatus={purchaseStatus} setPurchaseStatus={setPurchaseStatus} />
+      </Suspense>
+    </>
   )
 }
 
@@ -531,8 +543,7 @@ function ScriptMarketplaceLoading() {
     </div>
   )
 }
-
-function ScriptMarketplaceContent() {
+function ScriptMarketplaceContent({ purchaseStatus, setPurchaseStatus }: { purchaseStatus: 'success' | 'cancelled' | null, setPurchaseStatus: (status: 'success' | 'cancelled' | null) => void }) {
   const [mounted, setMounted] = useState(false)
   const [language, setLanguage] = useState<'en' | 'es'>('en')
   const [searchTerm, setSearchTerm] = useState('')
@@ -544,48 +555,8 @@ function ScriptMarketplaceContent() {
   const [minRating, setMinRating] = useState(0)
   const [currentTab, setCurrentTab] = useState('all')
   const [previewScript, setPreviewScript] = useState<Script | null>(null)
-  const [purchaseStatus, setPurchaseStatus] = useState<'success' | 'cancelled' | null>(null)
-
-  // Track processed session to prevent infinite loops
-  const processedSessionRef = useRef<string | null>(null)
-
-  const router = useRouter()
-  const searchParams = useSearchParams()
-
-  const { getCartCount, setIsOpen, addToCart, clearCart } = useCart()
+  const { getCartCount, setIsOpen, addToCart } = useCart()
   const { toggleFavorite, isFavorited, user } = useAuth()
-
-  // Store clearCart in a ref to avoid dependency issues
-  const clearCartRef = useRef(clearCart)
-  clearCartRef.current = clearCart
-
-  // Handle checkout redirect - runs once per session
-  useEffect(() => {
-    const purchase = searchParams.get('purchase')
-    const sessionId = searchParams.get('session_id')
-
-    // Only process each session once
-    if (purchase === 'success' && sessionId && processedSessionRef.current !== sessionId) {
-      processedSessionRef.current = sessionId
-      console.log('Purchase successful! Session:', sessionId)
-      setPurchaseStatus('success')
-      clearCartRef.current() // Clear the cart after successful purchase
-
-      // Clear URL params after a short delay
-      setTimeout(() => {
-        window.history.replaceState({}, '', '/')
-      }, 100)
-    } else if (purchase === 'cancelled' && processedSessionRef.current !== 'cancelled') {
-      processedSessionRef.current = 'cancelled'
-      setPurchaseStatus('cancelled')
-
-      // Clear URL params
-      setTimeout(() => {
-        window.history.replaceState({}, '', '/')
-      }, 100)
-    }
-  }, [searchParams])
-
   // Auto-dismiss success/cancelled message
   useEffect(() => {
     if (purchaseStatus) {
